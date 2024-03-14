@@ -1,0 +1,145 @@
+// SPDX-License-Identifier: MIT
+pragma solidity >=0.4.0 <0.8.0;
+
+import "./libraries/Stack.sol";
+
+contract DijsktrasVariant {
+
+    uint256 count = 1; //from 1
+    uint256 constant MAX_PATH = 20;
+    uint256 constant MAX_LENGTH = 20;
+
+    //price is represented by int
+    mapping(uint256 => uint256[]) public graph;
+    mapping(uint256 => address) public u2a;
+    mapping(address => uint256) public a2u;
+
+    function addPoolRelation(address tokenA, address tokenB) public {
+
+        uint256 tmpA = a2u[tokenA];
+        uint256 tmpB = a2u[tokenB];
+
+        if (tmpA == 0) {
+            tmpA = count;
+            count += 1;
+            a2u[tokenA] = tmpA;
+            u2a[tmpA] = tokenA;
+        }
+
+        if (tmpB == 0) {
+            tmpB = count;
+            count += 1;
+            a2u[tokenB] = tmpB;
+            u2a[tmpB] = tokenB;
+        }
+
+        graph[tmpA].push(tmpB);
+    }
+
+    function debugModifyGraph(uint256 vertex, uint256[] memory vertexs) public {
+        graph[vertex] = vertexs;
+    }
+
+    //uniswapv2
+    //function getPrice(address tokenA, address tokenB) public returns(uint160) {
+    //    return uint160(2);
+    //}
+
+    //copy
+    function copy(uint256[MAX_LENGTH] memory src, uint256[MAX_LENGTH] memory dest, uint256 length) public pure {
+        for(uint i = 0; i < length; i++) {
+            dest[i] = src[i];
+        }
+    }
+
+    function dijsktras_variant(address tokenA, address tokenB) public view returns(uint256[MAX_LENGTH][MAX_PATH] memory, uint256 pathIndex) {
+
+        uint256 tA = a2u[tokenA];
+        uint256 tB = a2u[tokenB];
+
+        require(tA != 0 && tB != 0, "no pool relation to A/B");
+
+        Stack.uint256Stack memory mainStack;
+        Stack.uint256Stack memory subjectStack;
+        bool[MAX_LENGTH] memory sptSet;
+
+        //src 压入主栈
+        Stack.push(mainStack, tA);
+        sptSet[tA] = true;
+        uint256[MAX_LENGTH][MAX_PATH] memory paths;
+
+        //src 压入邻边进入附栈
+        for(uint i = 0; i < graph[tA].length; i++) {
+            if (graph[tA][i] == tB) {
+                copy(mainStack.buffer, paths[pathIndex], mainStack.index);
+                paths[pathIndex][mainStack.index] = tB;
+                pathIndex += 1;
+                return (paths, pathIndex);
+            }
+        }
+        for(uint i = 0; i < graph[tA].length; i++) {
+            Stack.push(subjectStack, graph[tA][i]);
+            sptSet[graph[tA][i]] = true;
+        }
+
+        //终止条件: 附栈为空
+        for(; subjectStack.index != 0;) {
+            //附栈弹出顶点元素，查看元素是否是empty
+            uint256 subjectPara = Stack.pop(subjectStack);
+            sptSet[subjectPara] = false;
+            for(; subjectPara == 0; ) {
+                if (mainStack.index == 0) {
+                    return (paths, pathIndex);
+                }
+                uint256 mainPara = Stack.pop(mainStack);
+                sptSet[mainPara] = false;
+                if (subjectStack.index == 0) {
+                    return (paths, pathIndex);
+                }
+                subjectPara = Stack.pop(subjectStack);
+                sptSet[subjectPara] = false;
+            }
+            Stack.push(mainStack, subjectPara);
+            sptSet[subjectPara] = true;
+            Stack.push(subjectStack, 0);
+
+            //找到主栈最上层元素的所有邻接元素
+            require(mainStack.index != 0);
+            (uint256 mainVertex, ) = Stack.peek(mainStack);
+
+            uint256[MAX_LENGTH] memory adjacentVertex;
+            uint256 adjacentIndex;
+            //经过sptSet去重
+            for(uint i = 0; i < graph[mainVertex].length; i++) {
+                if (sptSet[graph[mainVertex][i]] == true) {
+                    continue;
+                }
+                adjacentVertex[adjacentIndex] = graph[mainVertex][i];
+                adjacentIndex += 1;
+            }
+
+            //查看邻接是否含有tokenB, 若有则得出一条路径，将路径保存, 邻接节点不必压入
+            bool isArrived = false;
+            for(uint i = 0; i < adjacentIndex; i++) {
+                if (adjacentVertex[i] == tB) {
+                    copy(mainStack.buffer, paths[pathIndex], mainStack.index);
+                    paths[pathIndex][mainStack.index] = tB;
+                    pathIndex += 1;
+                    isArrived = true;
+                    break;
+                }
+            }
+
+            //如果到达，经过此节点的后续路径不需再寻找
+            //如果未到达, 将剩余的邻接元素压入附栈, 更新sptSet;
+            if (!isArrived) {
+                for(uint i = 0; i < adjacentIndex; i++) {
+                    Stack.push(subjectStack, adjacentVertex[i]);
+                    sptSet[adjacentVertex[i]] = true;
+                }
+            }
+        }
+
+        return (paths, pathIndex);
+    }
+}

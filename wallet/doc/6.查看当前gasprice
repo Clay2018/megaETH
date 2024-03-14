@@ -1,0 +1,8 @@
+# 查看eth当前gasPrice, 控制台打印出当前 gasPrice
+./wallet eth gasprice
+
+# 查看btc当前gasPrice, 控制台打印出当前 gasPrice
+ ./wallet btc gasprice
+
+# 查看trx当前gasPrice, 控制台打印出当前 gasPrice, 此值跟faucet有关
+  ./wallet trx gasprice
